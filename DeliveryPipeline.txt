@@ -1,0 +1,34 @@
+## How the delivery pipeline works
+```
+Consumer subscribes
+        │
+        ▼
+EventPublisher.subscribe(consumer)
+        │
+        ▼
+CelFilterRegistry.registerConsumer(id, celExpr)
+        ├── Phase 1: PARSE  →  text → untyped AST       (syntax check)
+        └── Phase 2: CHECK  →  AST + type declarations → typed AST   (type-safety check)
+                                      ↑
+                              Any error surfaces HERE at subscription time
+                              (NOT at event time, not at 3am)
+
+Event arrives
+        │
+        ▼
+EventPublisher.publish(event)
+        │
+        ▼
+EventFlattener.flatten(event)   →   Map<String, String>
+    {"type" → "AFTER_REMOTE_DOWNLOAD",
+     "data.artifact.repoKey" → "helm-remote", ...}
+        │
+        ▼
+CelFilterRegistry.evaluateAll(event)
+        │  for each consumer:
+        ├── Phase 3: EVAL  →  program.eval({"event": flatMap}) → boolean
+        │                       (pre-compiled, stateless, thread-safe)
+        │
+        ├── matched  → consumer.onEvent(event)     ← real delivery
+        └── filtered → consumer.onFiltered()       ← counter only
+```
